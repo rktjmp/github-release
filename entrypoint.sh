@@ -1,4 +1,4 @@
-#!/bin/sh -l
+#!/bin/sh -lx
 
 PKG="meeDamian/github-release@2.0"
 
@@ -206,6 +206,10 @@ if [ "$INPUT_ALLOW_OVERRIDE" = "true" ]; then
   # Get list of all assets as a JSON map of: name->id
   #   docs ref: https://developer.github.com/v3/repos/releases/#list-assets-for-a-release
   current_assets="$(gh_release_api "$release_id/assets" | jq -r 'map({ (.name): .id }) | add')"
+
+  # echo "::notice::$release_id"
+  # echo "::notice::$current_assets"
+  # echo "::notice::$(gh_release_api "$release_id/assets")"
 fi
 
 
@@ -250,6 +254,16 @@ for asset in "$assets"/*; do
       >&2 echo "::notice::failed to upload asset: $file_name (see log for details)"
       >&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
       >&2 jq . < "$TMP/$file_name.json"
+      # attempt to detete incomplete asset if possible
+      # https://github.com/meeDamian/github-release/issues/27#issuecomment-945004495
+      asset_id=$(gh_release_api "$release_id/assets" | jq '.[] | select(.name=="$file_name").id')
+      echo "::notice::Attempt to get asset id of partial upload (may or may not exist): $asset_id"
+      if [ -n "$asset_id" ]; then
+        echo "::notice::Attempt asset delete"
+        gh_release_api "assets/$asset_id" DELETE
+      else
+        echo "::notice::Could not get asset id to attempt deletion, it may not exist."
+      fi
       sleep 5
     fi
   done
