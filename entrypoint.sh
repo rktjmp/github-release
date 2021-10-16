@@ -212,33 +212,52 @@ fi
 upload_url="$(echo "$releases_url" | sed -e 's|api|uploads|')"
 
 for asset in "$assets"/*; do
-	file_name="$(basename "$asset")"
+  file_name="$(basename "$asset")"
 
-	# If a list of previously uploaded assets is available, and contains
-	#   item with the same name as currently uploaded, delete it first.
-	if [ -n "$current_assets" ]; then
-		asset_id="$(echo "$current_assets" | jq ".\"$file_name\"")"
-		if [ -n "$asset_id" ]; then
-			# docs ref: https://developer.github.com/v3/repos/releases/#delete-a-release-asset
-			gh_release_api "assets/$asset_id" DELETE
-		fi
-	fi
+  # If a list of previously uploaded assets is available, and contains
+  #   item with the same name as currently uploaded, delete it first.
+  if [ -n "$current_assets" ]; then
+    asset_id="$(echo "$current_assets" | jq ".\"$file_name\"")"
+    if [ -n "$asset_id" ]; then
+      # docs ref: https://developer.github.com/v3/repos/releases/#delete-a-release-asset
+      gh_release_api "assets/$asset_id" DELETE
+    fi
+  fi
 
-	# docs ref: https://developer.github.com/v3/repos/releases/#upload-a-release-asset
-	status_code="$(curl -sS  -X POST \
-		--write-out "%{http_code}" -o "$TMP/$file_name.json" \
-		-H "Authorization: token $TOKEN" \
-		-H "Content-Length: $(stat -c %s "$asset")" \
-		-H "Content-Type: $(file -b --mime-type "$asset")" \
-		--upload-file "$asset" \
-		"$upload_url/$release_id/assets?name=$file_name")"
+  # docs ref: https://developer.github.com/v3/repos/releases/#upload-a-release-asset
+  upload_asset() {
+    status_code="$(curl -sS  -X POST \
+      --write-out "%{http_code}" -o "$TMP/$file_name.json" \
+      -H "Authorization: token $TOKEN" \
+      -H "Content-Length: $(stat -c %s "$asset")" \
+      -H "Content-Type: $(file -b --mime-type "$asset")" \
+      --upload-file "$asset" \
+      "$upload_url/$release_id/assets?name=$file_name")"
+    return $status_code
+  }
 
-	if [ "$status_code" -ne "201" ]; then
-		>&2 echo "::error::failed to upload asset: $file_name (see log for details)"
-		>&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
-		>&2 jq . < "$TMP/$file_name.json"
-		exit 1
-	fi
+  attempts=3
+  success=0
+  while [ "$attempts" -gt "0" ]; do
+    upload_asset
+    if [ $? = "201" ]; then
+      attempts=0
+      success=1
+    else
+      attempts=$((attempts-1));
+      echo "::notice::curl failed, status: $?, retry: $attempts"
+    fi
+  done
+
+  if [ "$success" -eq "1" ]; then
+    echo "::notice::curl success::"
+  else
+    >&2 echo "::error::failed to upload asset: $file_name (see log for details)"
+    >&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
+    >&2 jq . < "$TMP/$file_name.json"
+    exit 1
+  fi
+
 done
 
 echo "::endgroup::"
@@ -279,10 +298,8 @@ if [ "$success" -eq "1" ]; then
   echo "::endgroup::"
   >&2 echo "All done."
 else
-  if [ "$status_code" != "200" ]; then
-    >&2 echo "::error::failed to complete release (see log for details)"
-    >&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
-    >&2 jq . < "$TMP/publish.json"
-    exit 1
-  fi
+  >&2 echo "::error::failed to complete release (see log for details)"
+  >&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
+  >&2 jq . < "$TMP/publish.json"
+  exit 1
 fi
