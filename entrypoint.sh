@@ -226,6 +226,7 @@ for asset in "$assets"/*; do
 
   # docs ref: https://developer.github.com/v3/repos/releases/#upload-a-release-asset
   upload_asset() {
+    echo "::notice::Attempt asset curl request"
     status_code="$(curl -sS  -X POST \
       --write-out "%{http_code}" -o "$TMP/$file_name.json" \
       -H "Authorization: token $TOKEN" \
@@ -245,12 +246,12 @@ for asset in "$assets"/*; do
       success=1
     else
       attempts=$((attempts-1));
-      echo "::notice::curl failed, status: $?, retry: $attempts"
+      echo "::notice::Asset curl failed, status: $?, retry: $attempts"
     fi
   done
 
   if [ "$success" -eq "1" ]; then
-    echo "::notice::curl success::"
+    echo "::notice::Asset upload success"
   else
     >&2 echo "::error::failed to upload asset: $file_name (see log for details)"
     >&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
@@ -272,6 +273,7 @@ echo "::group::Complete Release"
 # Publish Release
 #   docs ref: https://developer.github.com/v3/repos/releases/#edit-a-release
 publish_release() {
+  echo "::notice::Attempt release curl request"
   status_code="$(curl -sS  -X PATCH  -d '{"draft": false}' \
     --write-out "%{http_code}" -o "$TMP/publish.json" \
     -H "Authorization: token $TOKEN" \
@@ -286,11 +288,12 @@ success=0
 while [ "$attempts" -gt "0" ]; do
   publish_release
   if [ $? = "200" ]; then
+    echo "::notice::Release curl success"
     attempts=0
     success=1
   else
     attempts=$((attempts-1));
-    echo "::notice::curl failed, status: $?, retry: $attempts"
+    echo "::notice::Release curl failed, status: $?, retry: $attempts"
   fi
 done
 
