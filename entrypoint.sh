@@ -222,6 +222,8 @@ for asset in "$assets"/*; do
   #   item with the same name as currently uploaded, delete it first.
   if [ -n "$current_assets" ]; then
     asset_id="$(echo "$current_assets" | jq ".\"$file_name\"")"
+    # note: check for "null" here because we have constructed a map of name -> id above^^^
+    #       which returns "null" not "" on a bad key
     if [ "$asset_id" != "null" ]; then
       # docs ref: https://developer.github.com/v3/repos/releases/#delete-a-release-asset
       gh_release_api "assets/$asset_id" DELETE
@@ -256,7 +258,9 @@ for asset in "$assets"/*; do
       >&2 jq . < "$TMP/$file_name.json"
       # attempt to detete incomplete asset if possible
       # https://github.com/meeDamian/github-release/issues/27#issuecomment-945004495
-      asset_id=$(gh_release_api "$release_id/assets" | jq '.[] | select(.name=="$file_name").id')
+      resp=$(gh_release_api "$release_id/assets")
+      echo $resp
+      asset_id=$(echo $resp | jq '.[] | select(.name=="$file_name").id')
       echo "::notice::Attempt to get asset id of partial upload (may or may not exist): $asset_id"
       if [ -n "$asset_id" ]; then
         echo "::notice::Attempt asset delete"
