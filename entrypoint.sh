@@ -247,6 +247,7 @@ for asset in "$assets"/*; do
     else
       attempts=$((attempts-1));
       echo "::notice::Asset $file_name curl failed, status: $?, retry: $attempts"
+      sleep 5
     fi
   done
 
@@ -294,6 +295,7 @@ while [ "$attempts" -gt "0" ]; do
   else
     attempts=$((attempts-1));
     echo "::notice::Release curl failed, status: $?, retry: $attempts"
+    sleep 5
   fi
 done
 
