@@ -218,7 +218,7 @@ for asset in "$assets"/*; do
   #   item with the same name as currently uploaded, delete it first.
   if [ -n "$current_assets" ]; then
     asset_id="$(echo "$current_assets" | jq ".\"$file_name\"")"
-    if [ -n "$asset_id" ]; then
+    if [ "$asset_id" != "null" ]; then
       # docs ref: https://developer.github.com/v3/repos/releases/#delete-a-release-asset
       gh_release_api "assets/$asset_id" DELETE
     fi
