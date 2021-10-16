@@ -247,6 +247,9 @@ for asset in "$assets"/*; do
     else
       attempts=$((attempts-1));
       echo "::notice::Asset $file_name curl failed, status: $?, retry: $attempts"
+      >&2 echo "::notice::failed to upload asset: $file_name (see log for details)"
+      >&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
+      >&2 jq . < "$TMP/$file_name.json"
       sleep 5
     fi
   done
@@ -254,9 +257,7 @@ for asset in "$assets"/*; do
   if [ "$success" -eq "1" ]; then
     echo "::notice::Asset upload success"
   else
-    >&2 echo "::error::failed to upload asset: $file_name (see log for details)"
-    >&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
-    >&2 jq . < "$TMP/$file_name.json"
+    echo "::notice::Asset upload failed too many times, giving up"
     exit 1
   fi
 
@@ -295,6 +296,9 @@ while [ "$attempts" -gt "0" ]; do
   else
     attempts=$((attempts-1));
     echo "::notice::Release curl failed, status: $?, retry: $attempts"
+    >&2 echo "::notice::failed to complete release (see log for details)"
+    >&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
+    >&2 jq . < "$TMP/publish.json"
     sleep 5
   fi
 done
@@ -303,8 +307,6 @@ if [ "$success" -eq "1" ]; then
   echo "::endgroup::"
   >&2 echo "All done."
 else
-  >&2 echo "::error::failed to complete release (see log for details)"
-  >&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
-  >&2 jq . < "$TMP/publish.json"
+  echo "::error::Release curl failed too many times, giving up."
   exit 1
 fi
