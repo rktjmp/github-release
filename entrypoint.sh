@@ -226,7 +226,7 @@ for asset in "$assets"/*; do
 
   # docs ref: https://developer.github.com/v3/repos/releases/#upload-a-release-asset
   upload_asset() {
-    echo "::notice::Attempt asset curl request"
+    echo "::notice::Attempt asset $file_name curl request"
     status_code="$(curl -sS  -X POST \
       --write-out "%{http_code}" -o "$TMP/$file_name.json" \
       -H "Authorization: token $TOKEN" \
@@ -246,7 +246,7 @@ for asset in "$assets"/*; do
       success=1
     else
       attempts=$((attempts-1));
-      echo "::notice::Asset curl failed, status: $?, retry: $attempts"
+      echo "::notice::Asset $file_name curl failed, status: $?, retry: $attempts"
     fi
   done
 
