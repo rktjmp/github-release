@@ -1,4 +1,4 @@
-#!/bin/sh -le
+#!/bin/sh -l
 
 PKG="meeDamian/github-release@2.0"
 
