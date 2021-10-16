@@ -1,6 +1,6 @@
-FROM alpine:3.11
+FROM alpine:3.14
 
-RUN apk add --no-cache file curl jq
+RUN apk add --no-cache file curl jq ca-certificates
 
 COPY entrypoint.sh /
 
