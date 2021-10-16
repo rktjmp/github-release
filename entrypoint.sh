@@ -252,19 +252,37 @@ echo "::group::Complete Release"
 
 # Publish Release
 #   docs ref: https://developer.github.com/v3/repos/releases/#edit-a-release
-status_code="$(curl -sS  -X PATCH  -d '{"draft": false}' \
-	--write-out "%{http_code}" -o "$TMP/publish.json" \
-	-H "Authorization: token $TOKEN" \
-	-H "Content-Type: application/json" \
-	"$releases_url/$release_id")"
+publish_release() {
+  status_code="$(curl -sS  -X PATCH  -d '{"draft": false}' \
+    --write-out "%{http_code}" -o "$TMP/publish.json" \
+    -H "Authorization: token $TOKEN" \
+    -H "Content-Type: application/json" \
+    "$releases_url/$release_id")"
 
-if [ "$status_code" != "200" ]; then
-	>&2 echo "::error::failed to complete release (see log for details)"
-	>&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
-	>&2 jq . < "$TMP/publish.json"
-	exit 1
+  return $status_code
+}
+
+attempts=3
+success=0
+while [ "$attempts" -gt "0" ]; do
+  publish_release
+  if [ $? = "200" ]; then
+    attempts=0
+    success=1
+  else
+    attempts=$((attempts-1));
+    echo "::notice::curl failed, status: $?, retry: $attempts"
+  fi
+done
+
+if [ "$success" -eq "1" ]; then
+  echo "::endgroup::"
+  >&2 echo "All done."
+else
+  if [ "$status_code" != "200" ]; then
+    >&2 echo "::error::failed to complete release (see log for details)"
+    >&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
+    >&2 jq . < "$TMP/publish.json"
+    exit 1
+  fi
 fi
-
-echo "::endgroup::"
-
->&2 echo "All done."
