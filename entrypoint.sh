@@ -260,7 +260,7 @@ for asset in "$assets"/*; do
       # https://github.com/meeDamian/github-release/issues/27#issuecomment-945004495
       resp=$(gh_release_api "$release_id/assets")
       echo $resp
-      asset_id=$(echo $resp | jq '.[] | select(.name=="$file_name").id')
+      asset_id=$(echo $resp | jq ".[] | select(.name==\"$file_name\").id")
       echo "::notice::Attempt to get asset id of partial upload (may or may not exist): $asset_id"
       if [ -n "$asset_id" ]; then
         echo "::notice::Attempt asset delete"
