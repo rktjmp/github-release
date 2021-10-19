@@ -1,4 +1,4 @@
-#!/bin/sh -lx
+#!/bin/sh -l
 
 PKG="meeDamian/github-release@2.0"
 
@@ -215,6 +215,11 @@ fi
 
 upload_url="$(echo "$releases_url" | sed -e 's|api|uploads|')"
 
+# We can want to know what assets fail to upload so we can warn about that in
+# the release body. This script runs in alpine -> busybox -> ash, so we can't
+# use arrays. Becaus of this, we'll just append a list of failed filenames.
+failed_assets_uploads=""
+
 for asset in "$assets"/*; do
   file_name="$(basename "$asset")"
 
@@ -252,8 +257,8 @@ for asset in "$assets"/*; do
       success=1
     else
       attempts=$((attempts-1));
-      echo "::notice::Asset $file_name curl failed, status: $?, retry: $attempts"
-      >&2 echo "::notice::failed to upload asset: $file_name (see log for details)"
+      echo "::warning::Asset $file_name curl failed, status: $?, retry: $attempts"
+      >&2 echo "::warning::failed to upload asset: $file_name (see log for details)"
       >&2 printf "\n\tERR: Failed asset upload: %s\n" "$file_name"
       >&2 jq . < "$TMP/$file_name.json"
       # attempt to detete incomplete asset if possible
@@ -263,10 +268,10 @@ for asset in "$assets"/*; do
       asset_id=$(echo $resp | jq ".[] | select(.name==\"$file_name\").id")
       echo "::notice::Attempt to get asset id of partial upload (may or may not exist): $asset_id"
       if [ -n "$asset_id" ]; then
-        echo "::notice::Attempt asset delete"
         gh_release_api "assets/$asset_id" DELETE
+        echo "::notice::Asset deleted"
       else
-        echo "::notice::Could not get asset id to attempt deletion, it may not exist."
+        echo "::notice::Could not get asset id to attempt deletion, it may not exist, this is ok."
       fi
       sleep 5
     fi
@@ -275,8 +280,11 @@ for asset in "$assets"/*; do
   if [ "$success" -eq "1" ]; then
     echo "::notice::Asset upload success"
   else
-    echo "::notice::Asset upload failed too many times, giving up"
-    exit 1
+    echo "::error::Asset upload failed too many times"
+    failed_assets_uploads+="- $file_name\n" # string is markdown list
+    # we no longer exit if an asset failed to upload so nightlys aren't
+    # consistenly broken.
+    # exit 1
   fi
 
 done
@@ -290,15 +298,35 @@ fi
 
 echo "::group::Complete Release"
 
+# we want to list failed assets in the body, so check for fails and build something 
+# that describes what whent wrong.
+if [ -n "$failed_assets_uploads" ]; then
+  INPUT_BODY+="\n\nSome assets failed to upload. See [link](), etc\n"
+  INPUT_BODY+=$failed_assets_uploads
+  echo "::notice::PATCHED BODY $INPUT_BODY"
+fi
+
 # Publish Release
 #   docs ref: https://developer.github.com/v3/repos/releases/#edit-a-release
 publish_release() {
   echo "::notice::Attempt release curl request"
-  status_code="$(curl -sS  -X PATCH  -d '{"draft": false}' \
+  status_code="$(jq -nc \
+    --arg body           "WHAT IS YOUR PROBLEM"\ #  "$(printf '%s' "$INPUT_BODY" | sed 's|\\|\\\\|g')" \
+    --argjson draft        "false" \
+    '{$body, $draft}' | \
+    curl -sS -X PATCH -d - \
     --write-out "%{http_code}" -o "$TMP/publish.json" \
     -H "Authorization: token $TOKEN" \
     -H "Content-Type: application/json" \
     "$releases_url/$release_id")"
+
+  cat $TMP/publish.json
+
+  # status_code="$(curl -sS  -X PATCH  -d '{"draft": false}' \
+  #   --write-out "%{http_code}" -o "$TMP/publish.json" \
+  #   -H "Authorization: token $TOKEN" \
+  #   -H "Content-Type: application/json" \
+  #   "$releases_url/$release_id")"
 
   return $status_code
 }
@@ -313,8 +341,8 @@ while [ "$attempts" -gt "0" ]; do
     success=1
   else
     attempts=$((attempts-1));
-    echo "::notice::Release curl failed, status: $?, retry: $attempts"
-    >&2 echo "::notice::failed to complete release (see log for details)"
+    echo "::warning::Release curl failed, status: $?, retry: $attempts"
+    >&2 echo "::warning::failed to complete release (see log for details)"
     >&2 printf "\n\tERR: Final publishing of the ready Github Release has failed\n"
     >&2 jq . < "$TMP/publish.json"
     sleep 5
